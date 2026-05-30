@@ -1,81 +1,81 @@
-# WarChaos Launcher - Reverse Engineering Report
+# WarChaos Launcher — Reverse Engineering Report
 
-## Metodo de Extracao
+## Extraction Method
 
-O `WarChaosLauncher.exe` e um executavel nativo .NET 8 que funciona como **apphost** para um assembly .NET chamado `WarChaosLauncher.dll`.
+`WarChaosLauncher.exe` is a native .NET 8 executable that acts as an **apphost** for a .NET assembly called `WarChaosLauncher.dll`.
 
-### Estrutura do arquivo
+### File structure
 
 ```
-[0x000000 - 0x02A800] PE nativo (apphost .NET)
+[0x000000 - 0x02A800] Native PE (apphost)
 [0x02A800 - 0x02B000] Padding (zeros)
-[0x02B000 - 0xAF0E00] WarChaosLauncher.dll (assembly .NET principal)
-[0xAF0E00 - 0xB3B508] Overlay Costura (DLLs comprimidas)
+[0x02B000 - 0xAF0E00] WarChaosLauncher.dll (main .NET assembly)
+[0xAF0E00 - 0xB3B508] Costura overlay (compressed DLLs)
 [0xB3B508 - 0xB41D86] .deps.json + .runtimeconfig.json
 ```
 
-### Protecoes
+### Protections
 
-- **Obfuscador**: Obfuscar + Eazfuscator.NET
-- **Costura.Fody**: DLLs comprimidas e embedadas (Deflate raw, sem header zlib, window bits -15)
-- **Strings ofuscadas**: Tabela de strings criptografada com XOR, chave derivada do hash do assembly
+- **Obfuscator**: Obfuscar + Eazfuscator.NET
+- **Costura.Fody**: DLLs compressed and embedded (raw Deflate, no zlib header, window bits -15)
+- **String obfuscation**: Encrypted string table with XOR, key derived from assembly hash
 
-### DLLs embedadas via Costura
+### Embedded DLLs (Costura)
 
-| DLL | Tamanho |
-|-----|---------|
-| Costura.dll | 5.120 bytes |
-| Guna.UI2.dll | 2.244.480 bytes |
-| Newtonsoft.Json.dll | 723.368 bytes |
-| System.CodeDom.dll | 183.560 bytes |
-| Vlc.DotNet.Core.dll | 66.048 bytes |
-| Vlc.DotNet.Core.Interops.dll | 79.872 bytes |
-| Vlc.DotNet.Forms.dll | 24.576 bytes |
+| DLL | Size |
+|-----|------|
+| Costura.dll | 5,120 bytes |
+| Guna.UI2.dll | 2,244,480 bytes |
+| Newtonsoft.Json.dll | 723,368 bytes |
+| System.CodeDom.dll | 183,560 bytes |
+| Vlc.DotNet.Core.dll | 66,048 bytes |
+| Vlc.DotNet.Core.Interops.dll | 79,872 bytes |
+| Vlc.DotNet.Forms.dll | 24,576 bytes |
 
-### Decodificacao das strings
+### String decoding
 
-A classe `<Module>` contem um inicializador estatico que configura o decoder de strings.
-A funcao `\u0006\u0016.\u0005(int key)` recebe uma chave inteira e retorna a string decodificada.
+The `<Module>` class contains a static initializer that sets up the string decoder.
+The function `\u0006\u0016.\u0005(int key)` takes an integer key and returns the decoded string.
 
-A tabela de strings fica em um recurso embedado cujo nome e derivado de:
+The string table is stored in an embedded resource whose name is derived from:
 ```
 num = -679303889
 num2 = num + 1573417278
 ResourceName = chr(0x02) + chr(0x05) + chr(0x18) + chr(0x1b) + chr(0x03) + chr(0x02) + chr(0x1b) + chr(0x10) + chr(0x18) + chr(0x10) + chr(0x10)
 ```
 
-Para decodificar em runtime, usei um projeto .NET que carrega a DLL via `AssemblyLoadContext`
-e invoca o metodo via reflection.
+To decode at runtime, a .NET project was created that loads the extracted DLL via `AssemblyLoadContext`
+and invokes the method through reflection.
 
 ---
 
-## Comando de Inicializacao do Game.exe
+## Game.exe Launch Command
 
-### Caminho
+### Path
 
 ```
 {gamePath}\Bin64Release\Game.exe
 ```
 
-O launcher procura nesta ordem:
+The launcher searches in this order:
 1. `{BaseDirectory}\Bin64Release\Game.exe`
 2. `{BaseDirectory}\..\Bin64Release\Game.exe`
 3. `C:\Program Files\WarChaos\Bin64Release\Game.exe`
 
-### Argumentos (flags)
+### Arguments (flags)
 
 ```
 +ui_show_cohtml 0
 +sys_use_cohtml_ui 0
 +r_DisplayInfo 0
 -Language Portuguese
--username "<usuario>"
--password "<senha>"
+-username "<username>"
+-password "<password>"
 ```
 
-### Keys decodificadas usadas na montagem dos argumentos
+### Decoded keys used in argument building
 
-| Key | Valor |
+| Key | Value |
 |-----|-------|
 | 1675718352 | `+online_use_tls 1 ` |
 | 1675714879 | `+online_use_protect 0 ` |
@@ -85,9 +85,12 @@ O launcher procura nesta ordem:
 | 1675714897 | `-Language Portuguese ` |
 | 1675715005 | `-username "` |
 | 1675714970 | `-password "` |
-| 1675714979 | `" ` |
-| 1675718360 | `  ` (espaco duplo) |
-| 1675718390 | `+online_server ` (presente no codigo mas nao usado na versao final) |
+| 1675714979 | `" ` (closing quote + space) |
+| 1675718360 | `  ` (double space separator) |
+| 1675718390 | `+online_server ` (present in code, not used in final build) |
+
+The launcher originally also passed `+online_server <IP:port>` but this was not included
+in the argument string of the analyzed build.
 
 ### ProcessStartInfo
 
@@ -99,52 +102,52 @@ new ProcessStartInfo {
 }
 ```
 
-WorkingDirectory = diretorio do Game.exe (Bin64Release)
+WorkingDirectory = Game.exe directory (Bin64Release)
 
 ---
 
-## API do Launcher Original
+## Original Launcher API
 
-### Servidores
+### Servers
 
-| Ambiente | Endereco |
-|----------|----------|
-| Producao | `http://181.214.221.245:80` |
-| Auth interno | `http://181.214.221.245:3001` |
+| Environment | Address |
+|-------------|---------|
+| Production | `http://181.214.221.245:80` |
+| Internal auth | `http://181.214.221.245:3001` |
 | Debug local | `http://127.0.0.1:3000` |
 
 ### Endpoints
 
-| Metodo | Path | Descricao |
-|--------|------|-----------|
-| POST | `/internal/launcher/login` | Login do launcher |
-| POST | `/internal/launcher/authorize-play` | Autorizar inicio de jogo |
-| POST | `/api/v1/register` | Registro de conta |
-| POST | `/api/v1/login` | Login publico |
-| GET | `/api/v1/status` | Status do servidor |
-| GET | `/api/v1/launcher/allow` | Verificar se launcher esta liberado |
-| GET | `/api/v1/ranking/players` | Ranking de jogadores |
-| GET | `/api/v1/ranking/clans` | Ranking de clans |
-| GET | `/warface/launcher/news.json` | Noticias |
-| GET | `/warface/client/manifest/clientTotalManifest.json` | Manifesto de arquivos |
-| GET | `/warface/client/manifest/binManifest.json` | Manifesto de binarios |
-| GET | `/warface/launcher/config/ThemeConfig.xml` | Tema |
-| GET | `/warface/launcher/config/PcConfig.xml` | Configuracao PC |
-| GET | `/warface/launcher/config/LauncherConfig.xml` | Config do launcher |
-| POST | `/launcher/coupon/preview` | Preview de cupom |
-| POST | `/launcher/coupon/redeem` | Resgatar cupom |
+| Method | Path | Description |
+|--------|------|-------------|
+| POST | `/internal/launcher/login` | Launcher login |
+| POST | `/internal/launcher/authorize-play` | Authorize game start |
+| POST | `/api/v1/register` | Account registration |
+| POST | `/api/v1/login` | Public login |
+| GET | `/api/v1/status` | Server status |
+| GET | `/api/v1/launcher/allow` | Check if launcher is allowed |
+| GET | `/api/v1/ranking/players` | Player rankings |
+| GET | `/api/v1/ranking/clans` | Clan rankings |
+| GET | `/warface/launcher/news.json` | News feed |
+| GET | `/warface/client/manifest/clientTotalManifest.json` | Full file manifest |
+| GET | `/warface/client/manifest/binManifest.json` | Binary manifest |
+| GET | `/warface/launcher/config/ThemeConfig.xml` | Theme config |
+| GET | `/warface/launcher/config/PcConfig.xml` | PC config |
+| GET | `/warface/launcher/config/LauncherConfig.xml` | Launcher config |
+| POST | `/launcher/coupon/preview` | Coupon preview |
+| POST | `/launcher/coupon/redeem` | Redeem coupon |
 
-### Fluxo de login original
+### Original login flow
 
-1. Usuario digita username + password no launcher
-2. HWID gerado do hardware:
+1. User types username + password in the launcher
+2. HWID is generated from hardware:
    - MAC address
    - CPU ID
    - Disk serial
    - Motherboard serial
    - Public IP (via `https://api.ipify.org`)
    - Local IPv4
-3. `POST /internal/launcher/login` com JSON:
+3. `POST /internal/launcher/login` with JSON:
    ```json
    {
      "username": "...",
@@ -158,58 +161,59 @@ WorkingDirectory = diretorio do Game.exe (Bin64Release)
      "ipv4": "..."
    }
    ```
-4. Resposta inclui: `token`, `account_info`, `profile_info`, `game_money`
-5. `POST /internal/launcher/authorize-play` para obter IP:porta do servidor
-6. Game.exe e lancado com os argumentos descritos acima
+4. Response includes: `token`, `account_info`, `profile_info`, `game_money`
+5. `POST /internal/launcher/authorize-play` to get game server IP:port
+6. Game.exe is launched with the arguments described above
 
-### Conexao do jogo
+### Game connection
 
 - DNS: `game.warchaos.xyz`
 - Game server: `37.148.133.32:9107`
 - Admin WebSocket: `ws://game.warchaos.xyz:9110`
 
-### Armazenamento local
+### Local storage
 
-- Credenciais salvas via DPAPI (`System.Security.Cryptography.ProtectedData`)
-- Arquivo: `%APPDATA%\WarChaos\.wcsave`
-- Configuracoes: `%APPDATA%\WarChaos\prefs.local.json`
+- Credentials saved via DPAPI (`System.Security.Cryptography.ProtectedData`)
+- File: `%APPDATA%\WarChaos\.wcsave`
+- Settings: `%APPDATA%\WarChaos\prefs.local.json`
   ```json
   {"gamePath":"C:\\Program Files\\WarChaos","language":"pt-BR","darkTheme":true,"autoLogin":false}
   ```
 
 ---
 
-## Game.exe - Flags nativas do CryEngine
+## Game.exe — CryEngine Native Flags
 
-Game.exe e um loader CryEngine que carrega `CryGame.dll`.
+Game.exe is a CryEngine loader that loads `CryGame.dll`.
 
-### Flags nativas encontradas
+### Native flags found
 
-| Flag | Descricao |
-|------|-----------|
-| `-language <lang>` | Idioma (ex: `Portuguese`, `brazilianportuguese`) |
-| `-devmode` | Modo desenvolvedor |
-| `-testmode` | Modo teste |
+| Flag | Description |
+|------|-------------|
+| `-language <lang>` | Language (e.g. `Portuguese`, `brazilianportuguese`) |
+| `-devmode` | Developer mode |
+| `-testmode` | Test mode |
 | `-memReplay` | Memory replay |
-| `-windowid <id>` | Window ID (para embedding) |
+| `-windowid <id>` | Window ID (for embedding) |
 | `-mod <mod>` | Mod parameter |
 
-O jogo usa XMPP (Jabber) para autenticacao online (`CryOnline.dll` contem referencias a `jabber.org/features/iq-auth`).
+The game uses XMPP (Jabber) for online authentication (`CryOnline.dll` contains references
+to `jabber.org/features/iq-auth`).
 
-### Strings relevantes do Game.exe
+### Notable Game.exe strings
 
-- `C:\Build\trunk\main\src\Bin64\Game.pdb` (caminho de build original)
-- `CryGame.dll` (DLL principal do jogo)
-- `sys_dll_game` (nome do modulo)
-- `restarting:  -mod ` (parametro de restart)
+- `C:\Build\trunk\main\src\Bin64\Game.pdb` (original build path)
+- `CryGame.dll` (main game DLL)
+- `sys_dll_game` (module name)
+- `restarting:  -mod ` (restart parameter)
 
 ---
 
-## Keys completas decodificadas
+## Complete Decoded Keys
 
-Todas as strings decodificadas do launcher organizadas por categoria:
+All strings decoded from the launcher, organized by category:
 
-### Comando de lancamento
+### Launch command
 | Key | String |
 |-----|--------|
 | 1675718390 | `+online_server ` |
@@ -224,13 +228,13 @@ Todas as strings decodificadas do launcher organizadas por categoria:
 | 1675714979 | `" ` |
 | 1675714970 | `-password "` |
 
-### Caminhos
+### Paths
 | Key | String |
 |-----|--------|
 | 1675718023 | `Bin64Release` |
 | 1675718335 | `Game.exe` |
 
-### Servidor
+### Server config
 | Key | String |
 |-----|--------|
 | 1675714540 | `http://` |
@@ -277,53 +281,53 @@ Todas as strings decodificadas do launcher organizadas por categoria:
 | 1675712181 | `unknown` |
 | 1675711381 | `https://api.ipify.org` |
 
-### UI Labels (exemplos)
+### UI Labels (samples)
 | Key | String |
 |-----|--------|
-| 1675705092 | `Iniciante` |
-| 1675705204 | `Recruta` |
+| 1675705092 | `Iniciante` (Beginner) |
+| 1675705204 | `Recruta` (Recruit) |
 | 1675706433 | `status` |
 | 1675706498 | `username` |
 | 1675706611 | `msg` |
 | 1675706601 | `ToString` |
 
-### Versao
+### Version
 | Key | String |
 |-----|--------|
 | 1675690391 | `1.0.0.0` |
 | 1675690369 | `WarChaosLauncherFile.zip` |
 | 1675690466 | `Nova versao disponivel com melhorias de estabilidade.` |
 
-### Mensagens de Erro (exemplos)
+### Error messages (samples)
 | Key | String |
 |-----|--------|
 | 1675718312 | `Executavel nao encontrado do jogo nao encontrado...` |
 | 1675717686 | `Falha ao gerar o Manifest local.` |
 | 1675717690 | `1.0.0` |
 | 1675717647 | `Erro ao carregar o Manifest local.` |
-| 1675693647 | `desconhecido` |
+| 1675693647 | `desconhecido` (unknown) |
 
 ---
 
-## Game.exe - Detalhes tecnicos
+## Game.exe — Technical Details
 
-- **Build original**: `C:\Build\trunk\main\src\Bin64\Game.pdb`
-- **Tipo**: PE32+ (x64), compilado com MSVC
-- **Tamanho**: 294.480 bytes
-- **DLL principal**: `CryGame.dll` (carregada em runtime)
+- **Original build**: `C:\Build\trunk\main\src\Bin64\Game.pdb`
+- **Type**: PE32+ (x64), compiled with MSVC
+- **Size**: 294,480 bytes
+- **Main DLL**: `CryGame.dll` (loaded at runtime)
 - **Engine**: CryEngine (Warface branch)
-- **Protocolo de rede**: XMPP com SASL authentication
-- **Assets**: Sistema de .pak files no diretorio `Game/`
+- **Network protocol**: XMPP with SASL authentication
+- **Assets**: `.pak` file system in the `Game/` directory
 
-### Logs de conexao
+### Connection logs
 ```
 %APPDATA%\WarChaos\net_connect.log
 ```
-Exemplo:
+Sample:
 ```
-DNS consultando game.warchaos.xyz
-TCP tentando 37.148.133.32:9107
-TCP conectado 37.148.133.32:9107
-AdminWS tentando ws://game.warchaos.xyz:9110
-AdminWS conectado ws://game.warchaos.xyz:9110
+DNS consulting game.warchaos.xyz
+TCP attempting 37.148.133.32:9107 source=dns:game.warchaos.xyz host=game.warchaos.xyz
+TCP connected 37.148.133.32:9107 source=dns:game.warchaos.xyz
+AdminWS attempting ws://game.warchaos.xyz:9110
+AdminWS connected ws://game.warchaos.xyz:9110
 ```

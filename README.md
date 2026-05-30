@@ -1,73 +1,49 @@
-# React + TypeScript + Vite
+# WarChaos Direct Launcher
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A temporary, lightweight launcher for WarChaos — an alternative Warface server.
 
-Currently, two official plugins are available:
+## Why this exists
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+WarChaos is a community-run alternative server for Warface, a game I've loved and played since 2014. After a troubled update, the official WarChaos launcher broke and became unusable. The game itself still worked fine if launched directly — but there was a catch.
 
-## React Compiler
+My username and password are very long, and the in-game login screen doesn't support clipboard paste (Ctrl+V). The clipboard is disabled inside the game window. Every time I wanted to play, I had to manually type my lengthy password character by character on the in-game screen — for every single session.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+That got old fast.
 
-## Expanding the ESLint configuration
+So I reverse-engineered the original `WarChaosLauncher.exe` to understand exactly how it launched `Game.exe` with credentials passed as command-line arguments. Once I knew the flags, I built this minimal launcher to do just one thing: let me type my credentials in a normal text field where paste works, and launch the game directly — no API calls, no updates, no fuss.
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+## What it does
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
+- Launches `Game.exe` with `-username` and `-password` as command-line arguments
+- Remembers your credentials locally (via Tauri's secure store plugin)
+- Detects when the game is running to prevent duplicate launches
+- Lets you pick a custom `Game.exe` path in Settings
+- Zero API communication — fully offline launcher
 
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
+## Game launch flags
 
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```
++ui_show_cohtml 0  +sys_use_cohtml_ui 0  +r_DisplayInfo 0 -Language Portuguese -username "your_user" -password "your_pass"
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Tech stack
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- **Frontend**: React 19 + TypeScript + Vite
+- **Backend**: Rust + Tauri 2.x
+- **Storage**: tauri-plugin-store
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Reverse engineering
+
+The full reverse engineering report is available in [REVERSE_ENGINEERING.md](./REVERSE_ENGINEERING.md). It documents:
+
+- How the original launcher's .NET assembly was extracted from the packed executable
+- The obfuscation layers (Obfuscar, Eazfuscator.NET, Costura.Fody)
+- The string decryption method and all decoded string keys (80+ entries)
+- The complete original API endpoint list
+- The original login flow (HWID generation, public IP lookup, auth endpoints)
+- CryEngine native flags found inside Game.exe
+- Server addresses, ports, and connection logs
+
+## Disclaimer
+
+I am not affiliated with WarChaos, Warface, My.com, or Crytek in any way. This launcher was built purely as a personal convenience tool to avoid the pain of typing a long password on a screen that blocks clipboard paste. No game files were modified, and no API communication takes place.
