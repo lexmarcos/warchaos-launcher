@@ -20,6 +20,10 @@ So I reverse-engineered the original `WarChaosLauncher.exe` to understand exactl
 - Lets you pick a custom `Game.exe` path in Settings
 - Zero API communication — fully offline launcher
 
+## Download
+
+You can download the launcher [here](https://github.com/lexmarcos/warchaos-launcher/releases/download/v1.0.0/warchaos-direct-launcher.exe)
+
 ## Game launch flags
 
 ```
